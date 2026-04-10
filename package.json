@@ -1,0 +1,21 @@
+{
+  "name": "racemake",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "lint": "biome check --write",
+    "format": "biome format --write"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.11",
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.7.6",
+    "hono": "^4.12.12",
+    "zod": "^4.3.6"
+  }
+}
