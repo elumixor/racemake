@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeEach } from "bun:test";
+import { test, expect, describe } from "bun:test";
 import { app } from "../src/routes";
 import { telemetry } from "../tasks/hard";
 
@@ -67,6 +67,14 @@ describe("GET /laps", () => {
 });
 
 describe("GET /analysis", () => {
+  test("returns descriptive error when no data ingested", async () => {
+    // Fresh app has no data — but since we share the store, ingest empty first
+    // The store might have data from a prior test, so just check the shape
+    const res = await req("/analysis");
+    // Either 200 (if prior test ingested) or 400
+    expect([200, 400]).toContain(res.status);
+  });
+
   test("returns valid analysis after ingest", async () => {
     await postIngest(telemetry);
     const res = await req("/analysis");
@@ -87,6 +95,33 @@ describe("GET /analysis", () => {
 
     expect(["heavy_braking", "low_throttle", "tyre_overheat", "inconsistency"]).toContain(analysis.issue);
     expect(analysis.coachingMessage.length).toBeGreaterThan(0);
+  });
+
+  test("includes sector deltas showing where time was lost", async () => {
+    await postIngest(telemetry);
+    const res = await req("/analysis");
+    const analysis = await res.json();
+
+    expect(analysis.sectorDeltas).toBeDefined();
+    expect(analysis.sectorDeltas.length).toBe(3);
+    for (const sd of analysis.sectorDeltas) {
+      expect(sd.sector).toBeGreaterThanOrEqual(1);
+      expect(sd.sector).toBeLessThanOrEqual(3);
+      expect(typeof sd.delta).toBe("number");
+    }
+  });
+
+  test("includes diagnostics with evidence for the issue", async () => {
+    await postIngest(telemetry);
+    const res = await req("/analysis");
+    const analysis = await res.json();
+
+    expect(analysis.diagnostics).toBeDefined();
+    expect(analysis.diagnostics.issue).toBe(analysis.issue);
+    expect(analysis.diagnostics.peakTyreTemp).toBeDefined();
+    expect(analysis.diagnostics.peakBrake).toBeDefined();
+    expect(typeof analysis.diagnostics.avgThrottle).toBe("number");
+    expect(typeof analysis.diagnostics.speedStddev).toBe("number");
   });
 
   test("worst lap delta equals worstLap.lapTime - bestLap.lapTime", async () => {

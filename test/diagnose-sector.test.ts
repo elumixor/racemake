@@ -9,27 +9,22 @@ describe("diagnoseSector", () => {
       frame({ tyres: { fl: 95, fr: 95, rl: 90, rr: 90 } }),
     ]);
     expect(result?.issue).toBe("tyre_overheat");
-    expect(result?.peakTyreTemp?.tyre).toBe("FL");
-    expect(result?.peakTyreTemp?.temp).toBe(112);
+    expect(result?.peakTyreTemp.tyre).toBe("FL");
+    expect(result?.peakTyreTemp.temp).toBe(112);
   });
 
   test("detects tyre_overheat on rear tyres", () => {
-    const result = diagnoseSector([
-      frame({ tyres: { fl: 90, fr: 90, rl: 90, rr: 115 } }),
-    ]);
+    const result = diagnoseSector([frame({ tyres: { fl: 90, fr: 90, rl: 90, rr: 115 } })]);
     expect(result?.issue).toBe("tyre_overheat");
-    expect(result?.peakTyreTemp?.tyre).toBe("RR");
-    expect(result?.peakTyreTemp?.temp).toBe(115);
+    expect(result?.peakTyreTemp.tyre).toBe("RR");
+    expect(result?.peakTyreTemp.temp).toBe(115);
   });
 
   test("detects heavy_braking at high speed", () => {
-    const result = diagnoseSector([
-      frame({ brk: 0.9, spd: 250 }),
-      frame({ brk: 0.5, spd: 180 }),
-    ]);
+    const result = diagnoseSector([frame({ brk: 0.9, spd: 250 }), frame({ brk: 0.5, spd: 180 })]);
     expect(result?.issue).toBe("heavy_braking");
-    expect(result?.peakBrake?.brake).toBe(0.9);
-    expect(result?.peakBrake?.speed).toBe(250);
+    expect(result?.peakBrake.brake).toBe(0.9);
+    expect(result?.peakBrake.speed).toBe(250);
   });
 
   test("does NOT flag heavy_braking at low speed", () => {
@@ -42,10 +37,7 @@ describe("diagnoseSector", () => {
 
   test("detects inconsistency when speed stddev > 40", () => {
     // Huge speed variance: 50 and 250 → mean=150, stddev=100
-    const result = diagnoseSector([
-      frame({ spd: 50, thr: 0.8 }),
-      frame({ spd: 250, thr: 0.8 }),
-    ]);
+    const result = diagnoseSector([frame({ spd: 50, thr: 0.8 }), frame({ spd: 250, thr: 0.8 })]);
     expect(result?.issue).toBe("inconsistency");
     expect(result?.speedStddev).toBeGreaterThan(40);
   });
@@ -75,12 +67,27 @@ describe("diagnoseSector", () => {
     expect(result?.issue).toBe("heavy_braking");
   });
 
+  test("always includes all metrics when an issue is detected", () => {
+    const result = diagnoseSector([
+      frame({ spd: 150, thr: 0.3, brk: 0.1, tyres: { fl: 95, fr: 95, rl: 90, rr: 90 } }),
+      frame({ spd: 155, thr: 0.4, brk: 0.0, tyres: { fl: 96, fr: 96, rl: 91, rr: 91 } }),
+    ]);
+    expect(result).not.toBeNull();
+    // All metric fields are present regardless of which issue triggered
+    expect(result?.peakTyreTemp).toBeDefined();
+    expect(result?.peakBrake).toBeDefined();
+    expect(typeof result?.avgThrottle).toBe("number");
+    expect(typeof result?.speedStddev).toBe("number");
+  });
+
   test("returns null for clean sector", () => {
-    expect(diagnoseSector([
-      frame({ spd: 150, thr: 0.8, brk: 0.1 }),
-      frame({ spd: 155, thr: 0.85, brk: 0.0 }),
-      frame({ spd: 148, thr: 0.75, brk: 0.05 }),
-    ])).toBeNull();
+    expect(
+      diagnoseSector([
+        frame({ spd: 150, thr: 0.8, brk: 0.1 }),
+        frame({ spd: 155, thr: 0.85, brk: 0.0 }),
+        frame({ spd: 148, thr: 0.75, brk: 0.05 }),
+      ]),
+    ).toBeNull();
   });
 
   test("returns null for empty frames", () => {

@@ -15,16 +15,16 @@ type TyreKey = (typeof TYRE_KEYS)[number];
 type TyreName = (typeof TYRE_NAMES)[number];
 
 /**
- * Diagnose the primary issue in a sector's telemetry and return
- * the diagnostic details needed to generate a data-driven coaching message.
+ * Diagnose the primary issue in a sector's telemetry.
+ * Always computes all metrics so coaching messages can reference secondary data.
  *
- * Returns null only if the sector has no frames.
+ * Returns null if the sector has no frames or no threshold is exceeded.
  * Severity order: tyre_overheat > heavy_braking > inconsistency > low_throttle.
  */
 export function diagnoseSector(frames: TelemetryFrame[]): DiagnosticDetails | null {
   if (frames.length === 0) return null;
 
-  let peakTyre = { tyre: "FL", temp: 0 };
+  let peakTyre = { tyre: "FL" as string, temp: 0 };
   let peakBrake = { brake: 0, speed: 0 };
   let totalSpeed = 0;
   let totalThrottle = 0;
@@ -48,10 +48,14 @@ export function diagnoseSector(frames: TelemetryFrame[]): DiagnosticDetails | nu
   for (const f of frames) variance += (f.spd - mean) ** 2;
   const speedStddev = Math.round(Math.sqrt(variance / frames.length) * 10) / 10;
 
-  if (peakTyre.temp > TYRE_TEMP_MAX) return { issue: "tyre_overheat", peakTyreTemp: peakTyre };
-  if (peakBrake.brake > HEAVY_BRAKE_THRESHOLD) return { issue: "heavy_braking", peakBrake };
-  if (speedStddev > SPEED_STDDEV_MAX) return { issue: "inconsistency", speedStddev };
-  if (avgThrottle < THROTTLE_AVG_MIN) return { issue: "low_throttle", avgThrottle };
+  // Determine the primary issue by severity order
+  let issue: DiagnosticDetails["issue"] | null = null;
+  if (peakTyre.temp > TYRE_TEMP_MAX) issue = "tyre_overheat";
+  else if (peakBrake.brake > HEAVY_BRAKE_THRESHOLD) issue = "heavy_braking";
+  else if (speedStddev > SPEED_STDDEV_MAX) issue = "inconsistency";
+  else if (avgThrottle < THROTTLE_AVG_MIN) issue = "low_throttle";
 
-  return null;
+  if (!issue) return null;
+
+  return { issue, peakTyreTemp: peakTyre, peakBrake, avgThrottle, speedStddev };
 }

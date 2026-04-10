@@ -3,11 +3,7 @@ import { analyze } from "services/analyze";
 import { frame } from "./helpers";
 
 /** Build a lap with controllable sector characteristics. */
-function buildLap(
-  lap: number,
-  baseTs: number,
-  opts: { s2Speed?: number; s2Throttle?: number; lapTime?: number } = {},
-) {
+function buildLap(lap: number, baseTs: number, opts: { s2Speed?: number; s2Throttle?: number; lapTime?: number } = {}) {
   const lt = opts.lapTime ?? 120;
   const s2Spd = opts.s2Speed ?? 180;
   const s2Thr = opts.s2Throttle ?? 0.7;
@@ -66,5 +62,44 @@ describe("analyze", () => {
 
     const result = analyze([...fast, ...slow, ...nextLap]);
     expect(result!.worstLap.delta).toBe(result!.worstLap.lapTime - result!.bestLap.lapTime);
+  });
+
+  test("includes sector deltas sorted by biggest loss", () => {
+    const fast = buildLap(1, 0, { lapTime: 110 });
+    const slow = buildLap(2, 120, { lapTime: 140, s2Throttle: 0.3 });
+    const nextLap = [frame({ ts: 400, lap: 3, pos: 0.0 })];
+
+    const result = analyze([...fast, ...slow, ...nextLap]);
+    expect(result).not.toBeNull();
+    expect(result!.sectorDeltas).toHaveLength(3);
+    // Sorted descending by delta
+    for (let i = 1; i < result!.sectorDeltas.length; i++) {
+      expect(result!.sectorDeltas[i - 1]!.delta).toBeGreaterThanOrEqual(result!.sectorDeltas[i]!.delta);
+    }
+  });
+
+  test("includes full diagnostics with all metrics", () => {
+    const fast = buildLap(1, 0, { lapTime: 110 });
+    const slow = buildLap(2, 120, { lapTime: 140, s2Throttle: 0.3 });
+    const nextLap = [frame({ ts: 400, lap: 3, pos: 0.0 })];
+
+    const result = analyze([...fast, ...slow, ...nextLap]);
+    expect(result).not.toBeNull();
+    expect(result!.diagnostics.issue).toBe(result!.issue);
+    expect(result!.diagnostics.peakTyreTemp).toBeDefined();
+    expect(result!.diagnostics.peakBrake).toBeDefined();
+    expect(typeof result!.diagnostics.avgThrottle).toBe("number");
+    expect(typeof result!.diagnostics.speedStddev).toBe("number");
+  });
+
+  test("coaching message references time delta", () => {
+    const fast = buildLap(1, 0, { lapTime: 110 });
+    const slow = buildLap(2, 120, { lapTime: 140, s2Throttle: 0.3 });
+    const nextLap = [frame({ ts: 400, lap: 3, pos: 0.0 })];
+
+    const result = analyze([...fast, ...slow, ...nextLap]);
+    expect(result).not.toBeNull();
+    // Coaching should reference the time lost with a "+" prefix
+    expect(result!.coachingMessage).toMatch(/\+\d+\.\d+s/);
   });
 });

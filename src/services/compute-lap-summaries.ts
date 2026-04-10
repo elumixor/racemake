@@ -1,6 +1,6 @@
+import type { SectorNumber } from "domain/analysis";
 import type { LapFrames, LapSummary } from "domain/laps";
 import type { TelemetryFrame } from "domain/telemetry";
-import type { SectorNumber } from "domain/analysis";
 import { getCompletedLaps } from "./get-completed-laps";
 import { getSector, SPA } from "./track";
 
