@@ -55,7 +55,7 @@ describe("analyze", () => {
     expect(result).not.toBeNull();
     expect(result!.problemSector).toBeGreaterThanOrEqual(1);
     expect(result!.problemSector).toBeLessThanOrEqual(3);
-    expect(result!.issue).toBeDefined();
+    expect(["heavy_braking", "low_throttle", "tyre_overheat", "inconsistency"]).toContain(result!.issue);
     expect(result!.coachingMessage.length).toBeGreaterThan(0);
   });
 

@@ -2,34 +2,30 @@ import { test, expect, describe } from "bun:test";
 import { generateCoaching } from "services/generate-coaching";
 
 describe("generateCoaching", () => {
-  test("includes sector name for tyre_overheat", () => {
-    const msg = generateCoaching(1, "tyre_overheat", 3);
+  test("tyre_overheat references the hot tyre and temperature", () => {
+    const msg = generateCoaching(1, { issue: "tyre_overheat", peakTyreTemp: { tyre: "FL", temp: 114 } }, 3);
     expect(msg).toContain("Eau Rouge");
     expect(msg).toContain("lap 3");
-    expect(msg.toLowerCase()).toContain("tyre");
+    expect(msg).toContain("FL");
+    expect(msg).toContain("114°C");
   });
 
-  test("includes sector name for heavy_braking", () => {
-    const msg = generateCoaching(2, "heavy_braking", 5);
+  test("heavy_braking references brake percentage and speed", () => {
+    const msg = generateCoaching(2, { issue: "heavy_braking", peakBrake: { brake: 0.92, speed: 248 } }, 5);
     expect(msg).toContain("Combes");
-    expect(msg).toContain("brak");
+    expect(msg).toContain("92%");
+    expect(msg).toContain("248");
   });
 
-  test("includes sector name for low_throttle", () => {
-    const msg = generateCoaching(3, "low_throttle", 2);
+  test("low_throttle references throttle percentage", () => {
+    const msg = generateCoaching(3, { issue: "low_throttle", avgThrottle: 0.42 }, 2);
     expect(msg).toContain("Stavelot");
-    expect(msg.toLowerCase()).toContain("throttle");
+    expect(msg).toContain("42%");
   });
 
-  test("includes sector name for inconsistency", () => {
-    const msg = generateCoaching(1, "inconsistency", 4);
+  test("inconsistency references speed stddev", () => {
+    const msg = generateCoaching(1, { issue: "inconsistency", speedStddev: 55.3 }, 4);
     expect(msg).toContain("Eau Rouge");
-    expect(msg.toLowerCase()).toContain("smooth");
-  });
-
-  test("provides a message even when issue is null", () => {
-    const msg = generateCoaching(2, null, 1);
-    expect(msg.length).toBeGreaterThan(0);
-    expect(msg).toContain("Combes");
+    expect(msg).toContain("55.3");
   });
 });

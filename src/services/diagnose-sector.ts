@@ -1,4 +1,4 @@
-import type { Issue } from "domain/analysis";
+import type { DiagnosticDetails } from "domain/analysis";
 import type { TelemetryFrame } from "domain/telemetry";
 
 // Diagnostic thresholds — tune these to adjust sensitivity
@@ -8,43 +8,50 @@ const HEAVY_BRAKE_MIN_SPEED = 200; // km/h, braking only counts as "heavy" at hi
 const SPEED_STDDEV_MAX = 40; // km/h, above this = inconsistent
 const THROTTLE_AVG_MIN = 0.6; // mean throttle below this = too timid
 
+const TYRE_NAMES = ["FL", "FR", "RL", "RR"] as const;
+const TYRE_KEYS = ["fl", "fr", "rl", "rr"] as const;
+
+type TyreKey = (typeof TYRE_KEYS)[number];
+type TyreName = (typeof TYRE_NAMES)[number];
+
 /**
- * Diagnose the primary issue in a sector's telemetry.
+ * Diagnose the primary issue in a sector's telemetry and return
+ * the diagnostic details needed to generate a data-driven coaching message.
  *
- * Returns the most severe issue found, or null if the sector looks clean.
+ * Returns null only if the sector has no frames.
  * Severity order: tyre_overheat > heavy_braking > inconsistency > low_throttle.
- *
- * Aggregates are collected in a single pass; only the variance computation
- * requires a second pass (needs the mean first).
  */
-export function diagnoseSector(frames: TelemetryFrame[]): Issue | null {
+export function diagnoseSector(frames: TelemetryFrame[]): DiagnosticDetails | null {
   if (frames.length === 0) return null;
 
-  let hasTyreOverheat = false;
-  let hasHeavyBraking = false;
+  let peakTyre = { tyre: "FL", temp: 0 };
+  let peakBrake = { brake: 0, speed: 0 };
   let totalSpeed = 0;
   let totalThrottle = 0;
 
   for (const f of frames) {
-    const { fl, fr, rl, rr } = f.tyres;
-    if (fl > TYRE_TEMP_MAX || fr > TYRE_TEMP_MAX || rl > TYRE_TEMP_MAX || rr > TYRE_TEMP_MAX)
-      hasTyreOverheat = true;
-    if (f.brk > HEAVY_BRAKE_THRESHOLD && f.spd > HEAVY_BRAKE_MIN_SPEED)
-      hasHeavyBraking = true;
+    for (let t = 0; t < TYRE_KEYS.length; t++) {
+      const temp = f.tyres[TYRE_KEYS[t] as TyreKey];
+      if (temp > peakTyre.temp) peakTyre = { tyre: TYRE_NAMES[t] as TyreName, temp };
+    }
+    if (f.brk > peakBrake.brake && f.spd > HEAVY_BRAKE_MIN_SPEED) {
+      peakBrake = { brake: f.brk, speed: f.spd };
+    }
     totalSpeed += f.spd;
     totalThrottle += f.thr;
   }
 
-  if (hasTyreOverheat) return "tyre_overheat";
-  if (hasHeavyBraking) return "heavy_braking";
+  const avgThrottle = Math.round((totalThrottle / frames.length) * 100) / 100;
 
-  // Second pass: variance requires the mean computed above
   const mean = totalSpeed / frames.length;
   let variance = 0;
   for (const f of frames) variance += (f.spd - mean) ** 2;
+  const speedStddev = Math.round(Math.sqrt(variance / frames.length) * 10) / 10;
 
-  if (Math.sqrt(variance / frames.length) > SPEED_STDDEV_MAX) return "inconsistency";
-  if (totalThrottle / frames.length < THROTTLE_AVG_MIN) return "low_throttle";
+  if (peakTyre.temp > TYRE_TEMP_MAX) return { issue: "tyre_overheat", peakTyreTemp: peakTyre };
+  if (peakBrake.brake > HEAVY_BRAKE_THRESHOLD) return { issue: "heavy_braking", peakBrake };
+  if (speedStddev > SPEED_STDDEV_MAX) return { issue: "inconsistency", speedStddev };
+  if (avgThrottle < THROTTLE_AVG_MIN) return { issue: "low_throttle", avgThrottle };
 
   return null;
 }

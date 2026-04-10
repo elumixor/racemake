@@ -3,7 +3,6 @@ import type { TelemetryFrame } from "domain/telemetry";
 
 const MIN_SPEED_KMH = 5;
 const LAP_START_THRESHOLD = 0.1; // pos must be below this to count as a full lap start
-const LAP_END_THRESHOLD = 0.9; // pos must be above this to count as a full lap end
 
 /** A frame is stationary if the car is barely moving and position hasn't changed. */
 function isStationary(frame: TelemetryFrame, prev: TelemetryFrame | undefined): boolean {
@@ -15,6 +14,10 @@ function isStationary(frame: TelemetryFrame, prev: TelemetryFrame | undefined): 
  * - Stationary frames (pit stops, red flags)
  * - Out-laps that don't start near the start/finish line
  * - Incomplete final laps that end mid-track
+ *
+ * A lap is considered complete when telemetry shows the car crossed
+ * back to the start/finish (a subsequent lap exists in the data).
+ * Does not assume sequential lap numbers — uses actual lap transitions.
  */
 export function getCompletedLaps(raw: TelemetryFrame[]): LapFrames[] {
   const filtered: TelemetryFrame[] = [];
@@ -25,6 +28,7 @@ export function getCompletedLaps(raw: TelemetryFrame[]): LapFrames[] {
     }
   }
 
+  // Group frames by lap number, preserving insertion order
   const lapMap = new Map<number, TelemetryFrame[]>();
   for (const f of filtered) {
     const arr = lapMap.get(f.lap) ?? [];
@@ -33,7 +37,11 @@ export function getCompletedLaps(raw: TelemetryFrame[]): LapFrames[] {
   }
 
   const lapNumbers = [...lapMap.keys()].sort((a, b) => a - b);
-  const lapNumberSet = new Set(lapNumbers);
+
+  // Build a set of lap numbers that have a successor in the data.
+  // A lap is complete if a later lap number exists (the car crossed start/finish).
+  const hasSuccessor = new Set<number>(lapNumbers.slice(0, -1));
+
   const completed: LapFrames[] = [];
 
   for (const num of lapNumbers) {
@@ -41,14 +49,13 @@ export function getCompletedLaps(raw: TelemetryFrame[]): LapFrames[] {
     if (!lapFrames) continue;
 
     const first = lapFrames[0];
-    const last = lapFrames[lapFrames.length - 1];
-    if (!first || !last) continue;
+    if (!first) continue;
 
+    // Out-lap: doesn't start near start/finish
     if (first.pos > LAP_START_THRESHOLD) continue;
 
-    // A lap is complete if there's a subsequent lap in the data,
-    // or if the car made it near the end of the track.
-    if (!lapNumberSet.has(num + 1) && last.pos < LAP_END_THRESHOLD) continue;
+    // Incomplete final lap: no subsequent lap in data
+    if (!hasSuccessor.has(num)) continue;
 
     completed.push({ lapNumber: num, frames: lapFrames });
   }

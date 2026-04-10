@@ -1,21 +1,26 @@
-import type { Issue } from "domain/analysis";
-import type { SectorNumber } from "domain/analysis";
+import type { DiagnosticDetails, SectorNumber } from "domain/analysis";
 import { getSectorName } from "./track";
 
-/** Produce a human-readable coaching tip for the given sector issue (or a generic "all clear" if null). */
-export function generateCoaching(sector: SectorNumber, issue: Issue | null, lapNumber: number): string {
+/** Produce a data-driven coaching tip in the PitGPT race-engineer voice. */
+export function generateCoaching(sector: SectorNumber, diag: DiagnosticDetails, lapNumber: number): string {
   const name = getSectorName(sector);
 
-  switch (issue) {
-    case "tyre_overheat":
-      return `${name} is costing you on lap ${lapNumber}. Tyre temps are through the roof. Back off the inputs, let the rubber breathe. You're cooking the fronts and losing grip on exit.`;
-    case "heavy_braking":
-      return `${name} on lap ${lapNumber} — you're braking way too late and too hard. Trail-brake earlier, scrub speed progressively. You're flat-spotting the tyres and losing time on exit.`;
-    case "low_throttle":
-      return `${name} is killing your lap ${lapNumber}. Throttle trace is way too timid. Trust the car, get on the power earlier. You're leaving tenths on the table every corner exit.`;
-    case "inconsistency":
-      return `${name} on lap ${lapNumber} — the speed trace is all over the place. Smooth inputs, consistent lines. Pick a reference and hit it every lap. The pace is there, you just need to be cleaner.`;
-    case null:
-      return `${name} on lap ${lapNumber} — no obvious issues in the telemetry. Delta is small. Focus on carrying more momentum and nailing the exits.`;
+  switch (diag.issue) {
+    case "tyre_overheat": {
+      const { tyre, temp } = diag.peakTyreTemp ?? { tyre: "front", temp: 0 };
+      return `${name} is costing you on lap ${lapNumber}. ${tyre} hit ${temp}°C — way over the limit. Back off the inputs, let the rubber breathe. You're destroying grip on exit.`;
+    }
+    case "heavy_braking": {
+      const { brake, speed } = diag.peakBrake ?? { brake: 0, speed: 0 };
+      return `${name} on lap ${lapNumber} — ${Math.round(brake * 100)}% brake at ${Math.round(speed)} km/h is way too aggressive. Trail-brake earlier, scrub speed progressively. You're flat-spotting and losing the exit.`;
+    }
+    case "low_throttle": {
+      const pct = Math.round((diag.avgThrottle ?? 0) * 100);
+      return `${name} is killing your lap ${lapNumber}. Average throttle only ${pct}% through the sector. Trust the car, get on the power earlier. You're leaving tenths on the table every exit.`;
+    }
+    case "inconsistency": {
+      const sd = diag.speedStddev ?? 0;
+      return `${name} on lap ${lapNumber} — speed variance is ${sd} km/h stddev, all over the place. Smooth inputs, consistent lines. Pick a reference and hit it every lap.`;
+    }
   }
 }
